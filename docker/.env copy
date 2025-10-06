@@ -1,4 +1,4 @@
-# Auto-dump ENV from system call on 04:10:44 GMT+0000 (Coordinated Universal Time)
+# Auto-dump ENV from system call on 02:31:57 GMT+0000 (Coordinated Universal Time)
 LLM_PROVIDER='ollama'
 EMBEDDING_MODEL_PREF='nomic-embed-text:latest'
 OLLAMA_BASE_PATH='http://host.docker.internal:11434'
@@ -12,7 +12,6 @@ EMBEDDING_MODEL_MAX_CHUNK_LENGTH='8192'
 VECTOR_DB='lancedb'
 WHISPER_PROVIDER='local'
 JWT_SECRET='my-random-string-for-anythingllm-should-be-at-least-20-chars'
-AGENT_SEARXNG_API_URL='http://host.docker.internal:8080'
 TTS_PROVIDER='native'
 STORAGE_DIR='/app/server/storage'
 SIG_KEY='42a718c1603686b23c6aeed892d6b21cb8d73638ec2a21e946c8a703cb446088'

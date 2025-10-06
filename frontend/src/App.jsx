@@ -22,6 +22,7 @@ import KeyboardShortcutsHelp from "@/components/KeyboardShortcutsHelp";
 const Main = lazy(() => import("@/pages/Main"));
 const InvitePage = lazy(() => import("@/pages/Invite"));
 const WorkspaceChat = lazy(() => import("@/pages/WorkspaceChat"));
+const UserChat = lazy(() => import("@/pages/UserChat"));
 const AdminUsers = lazy(() => import("@/pages/Admin/Users"));
 const AdminInvites = lazy(() => import("@/pages/Admin/Invitations"));
 const AdminWorkspaces = lazy(() => import("@/pages/Admin/Workspaces"));
@@ -107,6 +108,20 @@ export default function App() {
                   <Route
                     path="/sso/simple"
                     element={<SimpleSSOPassthrough />}
+                  />
+
+                  {/* User Chat Interface for non-admin users */}
+                  <Route
+                    path="/chat"
+                    element={<PrivateRoute Component={UserChat} />}
+                  />
+                  <Route
+                    path="/chat/:slug"
+                    element={<PrivateRoute Component={UserChat} />}
+                  />
+                  <Route
+                    path="/chat/:slug/t/:threadSlug"
+                    element={<PrivateRoute Component={UserChat} />}
                   />
 
                   <Route

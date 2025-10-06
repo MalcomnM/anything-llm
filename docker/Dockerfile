@@ -38,7 +38,11 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a group and user with specific UID and GID
-RUN groupadd -g "$ARG_GID" anythingllm && \
+RUN if ! getent group "$ARG_GID" > /dev/null 2>&1; then \
+        groupadd -g "$ARG_GID" anythingllm; \
+    else \
+        groupadd anythingllm; \
+    fi && \
     useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g anythingllm anythingllm && \
     mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R anythingllm:anythingllm /app
 
@@ -104,7 +108,11 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get update && \
     rm -rf /var/lib/apt/lists/*
 
 # Create a group and user with specific UID and GID
-RUN groupadd -g "$ARG_GID" anythingllm && \
+RUN if ! getent group "$ARG_GID" > /dev/null 2>&1; then \
+        groupadd -g "$ARG_GID" anythingllm; \
+    else \
+        groupadd anythingllm; \
+    fi && \
     useradd -l -u "$ARG_UID" -m -d /app -s /bin/bash -g anythingllm anythingllm && \
     mkdir -p /app/frontend/ /app/server/ /app/collector/ && chown -R anythingllm:anythingllm /app
 

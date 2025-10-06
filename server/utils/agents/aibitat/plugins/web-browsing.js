@@ -47,10 +47,33 @@ const webBrowsing = {
             additionalProperties: false,
           },
           handler: async function ({ query }) {
+            const startTime = Date.now();
+            this.super.handlerProps.log(
+              `[web-browsing] Handler invoked with query: "${query || 'undefined'}"`
+            );
+            
             try {
-              if (query) return await this.search(query);
-              return "There is nothing we can do. This function call returns no information.";
+              if (!query || query.trim().length === 0) {
+                this.super.handlerProps.log(
+                  `[web-browsing] ERROR: Empty or invalid query provided`
+                );
+                return "There is nothing we can do. This function call returns no information.";
+              }
+              
+              const result = await this.search(query);
+              const duration = Date.now() - startTime;
+              this.super.handlerProps.log(
+                `[web-browsing] Handler completed successfully in ${duration}ms`
+              );
+              return result;
             } catch (error) {
+              const duration = Date.now() - startTime;
+              this.super.handlerProps.log(
+                `[web-browsing] ERROR: Handler failed after ${duration}ms - ${error.message}`
+              );
+              this.super.handlerProps.log(
+                `[web-browsing] ERROR Stack: ${error.stack}`
+              );
               return `There was an error while calling the function. No data or response was found. Let the user know this was the error: ${error.message}`;
             }
           },
@@ -61,9 +84,24 @@ const webBrowsing = {
            * https://programmablesearchengine.google.com/controlpanel/create
            */
           search: async function (query) {
-            const provider =
-              (await SystemSettings.get({ label: "agent_search_provider" }))
-                ?.value ?? "unknown";
+            this.super.handlerProps.log(
+              `[web-browsing] Starting search for query: "${query}"`
+            );
+            
+            let provider;
+            try {
+              const providerSetting = await SystemSettings.get({ label: "agent_search_provider" });
+              provider = providerSetting?.value ?? "unknown";
+              this.super.handlerProps.log(
+                `[web-browsing] Retrieved search provider setting: "${provider}"`
+              );
+            } catch (error) {
+              this.super.handlerProps.log(
+                `[web-browsing] ERROR: Failed to retrieve search provider setting - ${error.message}`
+              );
+              provider = "unknown";
+            }
+            
             let engine;
             switch (provider) {
               case "google-search-engine":
@@ -94,9 +132,31 @@ const webBrowsing = {
                 engine = "_exaSearch";
                 break;
               default:
+                this.super.handlerProps.log(
+                  `[web-browsing] WARNING: Unknown provider "${provider}", falling back to Google Search Engine`
+                );
                 engine = "_googleSearchEngine";
             }
-            return await this[engine](query);
+            
+            this.super.handlerProps.log(
+              `[web-browsing] Using search engine: ${engine} (provider: ${provider})`
+            );
+            
+            const searchStartTime = Date.now();
+            try {
+              const result = await this[engine](query);
+              const searchDuration = Date.now() - searchStartTime;
+              this.super.handlerProps.log(
+                `[web-browsing] Search completed successfully in ${searchDuration}ms using ${engine}`
+              );
+              return result;
+            } catch (error) {
+              const searchDuration = Date.now() - searchStartTime;
+              this.super.handlerProps.log(
+                `[web-browsing] ERROR: Search failed after ${searchDuration}ms using ${engine} - ${error.message}`
+              );
+              throw error;
+            }
           },
 
           /**
@@ -117,7 +177,14 @@ const webBrowsing = {
            * https://programmablesearchengine.google.com/controlpanel/create
            */
           _googleSearchEngine: async function (query) {
+            this.super.handlerProps.log(
+              `[web-browsing] [GoogleSearchEngine] Starting search for: "${query}"`
+            );
+            
             if (!process.env.AGENT_GSE_CTX || !process.env.AGENT_GSE_KEY) {
+              this.super.handlerProps.log(
+                `[web-browsing] [GoogleSearchEngine] ERROR: Missing required environment variables - AGENT_GSE_CTX: ${!!process.env.AGENT_GSE_CTX}, AGENT_GSE_KEY: ${!!process.env.AGENT_GSE_KEY}`
+              );
               this.super.introspect(
                 `${this.caller}: I can't use Google searching because the user has not defined the required API keys.\nVisit: https://programmablesearchengine.google.com/controlpanel/create to create the API keys.`
               );
@@ -130,42 +197,72 @@ const webBrowsing = {
             searchURL.searchParams.append("key", process.env.AGENT_GSE_KEY);
             searchURL.searchParams.append("cx", process.env.AGENT_GSE_CTX);
             searchURL.searchParams.append("q", query);
+            
+            this.super.handlerProps.log(
+              `[web-browsing] [GoogleSearchEngine] Constructed search URL: ${searchURL.toString().replace(process.env.AGENT_GSE_KEY, '[REDACTED]')}`
+            );
 
             this.super.introspect(
               `${this.caller}: Searching on Google for "${
                 query.length > 100 ? `${query.slice(0, 100)}...` : query
               }"`
             );
+            const requestStartTime = Date.now();
             const data = await fetch(searchURL)
               .then((res) => {
+                const requestDuration = Date.now() - requestStartTime;
+                this.super.handlerProps.log(
+                  `[web-browsing] [GoogleSearchEngine] API request completed in ${requestDuration}ms with status: ${res.status}`
+                );
                 if (res.ok) return res.json();
                 throw new Error(
                   `${res.status} - ${res.statusText}. params: ${JSON.stringify({ key: this.middleTruncate(process.env.AGENT_GSE_KEY, 5), cx: this.middleTruncate(process.env.AGENT_GSE_CTX, 5), q: query })}`
                 );
               })
-              .then((searchResult) => searchResult?.items || [])
+              .then((searchResult) => {
+                this.super.handlerProps.log(
+                  `[web-browsing] [GoogleSearchEngine] Raw API response received with ${searchResult?.items?.length || 0} items`
+                );
+                return searchResult?.items || [];
+              })
               .then((items) => {
-                return items.map((item) => {
+                const processedItems = items.map((item) => {
                   return {
                     title: item.title,
                     link: item.link,
                     snippet: item.snippet,
                   };
                 });
+                this.super.handlerProps.log(
+                  `[web-browsing] [GoogleSearchEngine] Processed ${processedItems.length} search results`
+                );
+                return processedItems;
               })
               .catch((e) => {
+                const requestDuration = Date.now() - requestStartTime;
+                this.super.handlerProps.log(
+                  `[web-browsing] [GoogleSearchEngine] ERROR: Request failed after ${requestDuration}ms - ${e.message}`
+                );
                 this.super.handlerProps.log(
                   `${this.name}: Google Search Error: ${e.message}`
                 );
                 return [];
               });
 
-            if (data.length === 0)
+            if (data.length === 0) {
+              this.super.handlerProps.log(
+                `[web-browsing] [GoogleSearchEngine] No results found for query: "${query}"`
+              );
               return `No information was found online for the search query.`;
+            }
 
             const result = JSON.stringify(data);
+            const tokenCount = this.countTokens(result);
+            this.super.handlerProps.log(
+              `[web-browsing] [GoogleSearchEngine] Returning ${data.length} results (~${tokenCount} tokens)`
+            );
             this.super.introspect(
-              `${this.caller}: I found ${data.length} results - reviewing the results now. (~${this.countTokens(result)} tokens)`
+              `${this.caller}: I found ${data.length} results - reviewing the results now. (~${tokenCount} tokens)`
             );
             return result;
           },
@@ -450,8 +547,15 @@ const webBrowsing = {
             return result;
           },
           _searXNGEngine: async function (query) {
+            this.super.handlerProps.log(
+              `[web-browsing] [SearXNGEngine] Starting search for: "${query}"`
+            );
+            
             let searchURL;
             if (!process.env.AGENT_SEARXNG_API_URL) {
+              this.super.handlerProps.log(
+                `[web-browsing] [SearXNGEngine] ERROR: Missing required environment variable AGENT_SEARXNG_API_URL`
+              );
               this.super.introspect(
                 `${this.caller}: I can't use SearXNG searching because the user has not defined the required base URL.\nPlease set this value in the agent skill settings.`
               );
@@ -462,7 +566,13 @@ const webBrowsing = {
               searchURL = new URL(process.env.AGENT_SEARXNG_API_URL);
               searchURL.searchParams.append("q", encodeURIComponent(query));
               searchURL.searchParams.append("format", "json");
+              this.super.handlerProps.log(
+                `[web-browsing] [SearXNGEngine] Constructed search URL: ${searchURL.toString()}`
+              );
             } catch (e) {
+              this.super.handlerProps.log(
+                `[web-browsing] [SearXNGEngine] ERROR: Invalid URL provided - ${e.message}`
+              );
               this.super.handlerProps.log(`SearXNG Search: ${e.message}`);
               this.super.introspect(
                 `${this.caller}: I can't use SearXNG searching because the url provided is not a valid URL.`
@@ -476,6 +586,7 @@ const webBrowsing = {
               }"`
             );
 
+            const requestStartTime = Date.now();
             const { response, error } = await fetch(searchURL.toString(), {
               method: "GET",
               headers: {
@@ -484,22 +595,37 @@ const webBrowsing = {
               },
             })
               .then((res) => {
+                const requestDuration = Date.now() - requestStartTime;
+                this.super.handlerProps.log(
+                  `[web-browsing] [SearXNGEngine] API request completed in ${requestDuration}ms with status: ${res.status}`
+                );
                 if (res.ok) return res.json();
                 throw new Error(
                   `${res.status} - ${res.statusText}. params: ${JSON.stringify({ url: searchURL.toString() })}`
                 );
               })
               .then((data) => {
+                this.super.handlerProps.log(
+                  `[web-browsing] [SearXNGEngine] Raw API response received with ${data?.results?.length || 0} results`
+                );
                 return { response: data, error: null };
               })
               .catch((e) => {
+                const requestDuration = Date.now() - requestStartTime;
+                this.super.handlerProps.log(
+                  `[web-browsing] [SearXNGEngine] ERROR: Request failed after ${requestDuration}ms - ${e.message}`
+                );
                 this.super.handlerProps.log(
                   `SearXNG Search Error: ${e.message}`
                 );
                 return { response: null, error: e.message };
               });
-            if (error)
+            if (error) {
+              this.super.handlerProps.log(
+                `[web-browsing] [SearXNGEngine] Returning error to user: ${error}`
+              );
               return `There was an error searching for content. ${error}`;
+            }
 
             const data = [];
             response.results?.forEach((searchResult) => {
@@ -511,13 +637,25 @@ const webBrowsing = {
                 publishedDate,
               });
             });
+            
+            this.super.handlerProps.log(
+              `[web-browsing] [SearXNGEngine] Processed ${data.length} search results`
+            );
 
-            if (data.length === 0)
+            if (data.length === 0) {
+              this.super.handlerProps.log(
+                `[web-browsing] [SearXNGEngine] No results found for query: "${query}"`
+              );
               return `No information was found online for the search query.`;
+            }
 
             const result = JSON.stringify(data);
+            const tokenCount = this.countTokens(result);
+            this.super.handlerProps.log(
+              `[web-browsing] [SearXNGEngine] Returning ${data.length} results (~${tokenCount} tokens)`
+            );
             this.super.introspect(
-              `${this.caller}: I found ${data.length} results - reviewing the results now. (~${this.countTokens(result)} tokens)`
+              `${this.caller}: I found ${data.length} results - reviewing the results now. (~${tokenCount} tokens)`
             );
             return result;
           },
@@ -585,6 +723,10 @@ const webBrowsing = {
             return result;
           },
           _duckDuckGoEngine: async function (query) {
+            this.super.handlerProps.log(
+              `[web-browsing] [DuckDuckGoEngine] Starting search for: "${query}"`
+            );
+            
             this.super.introspect(
               `${this.caller}: Using DuckDuckGo to search for "${
                 query.length > 100 ? `${query.slice(0, 100)}...` : query
@@ -593,22 +735,45 @@ const webBrowsing = {
 
             const searchURL = new URL("https://html.duckduckgo.com/html");
             searchURL.searchParams.append("q", query);
+            
+            this.super.handlerProps.log(
+              `[web-browsing] [DuckDuckGoEngine] Constructed search URL: ${searchURL.toString()}`
+            );
 
+            const requestStartTime = Date.now();
             const response = await fetch(searchURL.toString())
               .then((res) => {
+                const requestDuration = Date.now() - requestStartTime;
+                this.super.handlerProps.log(
+                  `[web-browsing] [DuckDuckGoEngine] API request completed in ${requestDuration}ms with status: ${res.status}`
+                );
                 if (res.ok) return res.text();
                 throw new Error(
                   `${res.status} - ${res.statusText}. params: ${JSON.stringify({ url: searchURL.toString() })}`
                 );
               })
               .catch((e) => {
+                const requestDuration = Date.now() - requestStartTime;
+                this.super.handlerProps.log(
+                  `[web-browsing] [DuckDuckGoEngine] ERROR: Request failed after ${requestDuration}ms - ${e.message}`
+                );
                 this.super.handlerProps.log(
                   `DuckDuckGo Search Error: ${e.message}`
                 );
                 return null;
               });
 
-            if (!response) return `There was an error searching DuckDuckGo.`;
+            if (!response) {
+              this.super.handlerProps.log(
+                `[web-browsing] [DuckDuckGoEngine] No response received from DuckDuckGo`
+              );
+              return `There was an error searching DuckDuckGo.`;
+            }
+            
+            this.super.handlerProps.log(
+              `[web-browsing] [DuckDuckGoEngine] Received HTML response, parsing results...`
+            );
+            
             const html = response;
             const data = [];
             const results = html.split('<div class="result results_links');
@@ -642,13 +807,24 @@ const webBrowsing = {
               }
             }
 
+            this.super.handlerProps.log(
+              `[web-browsing] [DuckDuckGoEngine] Parsed ${data.length} results from HTML response`
+            );
+
             if (data.length === 0) {
+              this.super.handlerProps.log(
+                `[web-browsing] [DuckDuckGoEngine] No results found for query: "${query}"`
+              );
               return `No information was found online for the search query.`;
             }
 
             const result = JSON.stringify(data);
+            const tokenCount = this.countTokens(result);
+            this.super.handlerProps.log(
+              `[web-browsing] [DuckDuckGoEngine] Returning ${data.length} results (~${tokenCount} tokens)`
+            );
             this.super.introspect(
-              `${this.caller}: I found ${data.length} results - reviewing the results now. (~${this.countTokens(result)} tokens)`
+              `${this.caller}: I found ${data.length} results - reviewing the results now. (~${tokenCount} tokens)`
             );
             return result;
           },

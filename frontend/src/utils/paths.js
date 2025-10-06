@@ -67,6 +67,17 @@ export default {
   hosting: () => {
     return "https://my.mintplexlabs.com/aio-checkout?product=anythingllm";
   },
+  chat: {
+    home: () => {
+      return "/chat";
+    },
+    workspace: (slug, options = {}) => {
+      return applyOptions(`/chat/${slug}`, options);
+    },
+    thread: (wsSlug, threadSlug) => {
+      return `/chat/${wsSlug}/t/${threadSlug}`;
+    },
+  },
   workspace: {
     chat: (slug, options = {}) => {
       return applyOptions(`/workspace/${slug}`, options);

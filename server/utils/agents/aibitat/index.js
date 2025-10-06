@@ -688,7 +688,23 @@ ${this.getHistory({ to: route.to })
         `[debug]: ${fn.caller} is attempting to call \`${name}\` tool ${JSON.stringify(args, null, 2)}`
       );
 
+      // Additional logging for web-browsing tool
+      if (name === 'web-browsing') {
+        this.handlerProps?.log?.(
+          `[AgentHandler] [web-browsing] Tool invocation started with query: "${args?.query || 'undefined'}"`
+        );
+      }
+
+      const toolStartTime = Date.now();
       const result = await fn.handler(args);
+      const toolDuration = Date.now() - toolStartTime;
+
+      // Additional logging for web-browsing tool completion
+      if (name === 'web-browsing') {
+        this.handlerProps?.log?.(
+          `[AgentHandler] [web-browsing] Tool completed in ${toolDuration}ms with result length: ${result?.length || 0} characters`
+        );
+      }
       Telemetry.sendTelemetry("agent_tool_call", { tool: name }, null, true);
 
       // If the tool call has direct output enabled, return the result directly to the chat
